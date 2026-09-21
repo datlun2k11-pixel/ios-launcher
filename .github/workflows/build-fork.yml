@@ -1,0 +1,120 @@
+name: Build Fork IPA
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Theos
+        run: |
+          echo "installing theos"
+          export THEOS=$(mktemp -d theos.XXXXX)
+          echo "THEOS=$THEOS" >> $GITHUB_ENV
+
+          export ARCH=$(uname -m)
+
+          # depth=1 for SPEED
+          git clone --recursive https://github.com/theos/theos.git $THEOS --depth=1
+
+          echo "downloading llvm toolchain"
+          curl -sL https://github.com/L1ghtmann/llvm-project/releases/latest/download/iOSToolchain-$ARCH.tar.xz | tar -xJvf - -C $THEOS/toolchain/
+
+          if [[ -x $THEOS/toolchain/linux/iphone/bin/clang ]]; then
+            echo "Successfully installed the toolchain!"
+          else
+            echo "Something appears to have gone wrong -- the toolchain is not accessible. Please try again."
+            exit 7
+          fi
+
+          echo "installing sdk !!"
+          $THEOS/bin/install-sdk iPhoneOS16.5
+
+      - name: Replace Download Link (optional for fork)
+        # Fork dùng Import IPA nên không cần secrets GD_DOWNLOAD.
+        # Nếu có secrets thì dùng, không thì thay bằng rỗng để build vẫn pass.
+        run: |
+          GD_DOWNLOAD="${{ secrets.GD_DOWNLOAD }}"
+          KEYONE="${{ secrets.KEYONE }}"
+          KEYTWO="${{ secrets.KEYTWO }}"
+          if [ -n "$GD_DOWNLOAD" ]; then
+            sed -i "s|__DOWNLOAD_LINK__|$GD_DOWNLOAD|" src/RootViewController.m
+          else
+            sed -i 's|__DOWNLOAD_LINK__||' src/RootViewController.m
+          fi
+          if [ -n "$KEYONE" ]; then
+            sed -i "s|__KEY_PART1__|$KEYONE|" src/RootViewController.m
+          else
+            sed -i 's|__KEY_PART1__||' src/RootViewController.m
+          fi
+          if [ -n "$KEYTWO" ]; then
+            sed -i "s|__KEY_PART2__|$KEYTWO|" src/RootViewController.m
+          else
+            sed -i 's|__KEY_PART2__||' src/RootViewController.m
+          fi
+
+      - name: Replace Metadata Keywords
+        run: |
+          sed -i "s|__COMMIT_HASH__|$(git rev-parse --short "$GITHUB_SHA")|" src/main.m
+
+      - name: Build IPA + TIPA
+        run: |
+          make package FINALPACKAGE=1 STRIP=0
+          make clean
+          make package FINALPACKAGE=1 STRIP=0 TROLLSTORE=1
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@main
+        with:
+          name: GeodeLauncher-Fork
+          path: packages/*.*
+
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Declare Version Variables
+        id: ref
+        run: |
+          echo "version=$(cat VERSION | xargs)" >> $GITHUB_OUTPUT
+          echo "hash=$(git rev-parse --short "$GITHUB_SHA")" >> $GITHUB_OUTPUT
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ github.workspace }}/artifacts
+
+      - name: Rename files
+        run: |
+          ls -R artifacts
+          mv artifacts/GeodeLauncher-Fork/com.geode.launcher_${{ steps.ref.outputs.version }}.ipa artifacts/GeodeLauncher-Fork/com.geode.launcher_${{ steps.ref.outputs.hash }}.ipa || true
+          mv artifacts/GeodeLauncher-Fork/com.geode.launcher_${{ steps.ref.outputs.version }}.tipa artifacts/GeodeLauncher-Fork/com.geode.launcher_${{ steps.ref.outputs.hash }}.tipa || true
+
+      - name: Update Development Release
+        uses: andelf/nightly-release@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: nightly
+          name: 'Development Release'
+          body: Geode iOS fork build (Import IPA) for commit ${{ github.sha }}.
+          files: |
+            ./artifacts/GeodeLauncher-Fork/*.ipa
+            ./artifacts/GeodeLauncher-Fork/*.tipa
