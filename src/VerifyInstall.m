@@ -16,9 +16,8 @@ BOOL hasDoneUpdate = NO;
 
 @implementation VerifyInstall
 + (BOOL)verifyGDAuthenticity {
-	if (![Utils isSandboxed])
-		return YES;
-	return [[Utils getPrefs] boolForKey:@"GDVerified"];
+	// Verify step removed — always treat GD as verified so install flows straight through.
+	return YES;
 }
 
 + (BOOL)canLaunchAppWithBundleID:(NSString*)bundleID {

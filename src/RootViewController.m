@@ -154,14 +154,7 @@ extern NSString* g_commitHash;
 	    [self.launchButton addTarget:self action:@selector(launchGame) forControlEvents:UIControlEventTouchUpInside];
 	} else {
 		[self.optionalTextLabel setHidden:NO];
-		if (![VerifyInstall verifyGDAuthenticity] && ![VerifyInstall verifyGDInstalled]) {
-			self.launchButton.frame = CGRectMake(self.view.center.x - 85, CGRectGetMaxY(self.optionalTextLabel.frame) + 15, 110, 45);
-			self.settingsButton.frame = CGRectMake(self.view.center.x + 30, CGRectGetMaxY(self.optionalTextLabel.frame) + 15, 45, 45);
-			self.optionalTextLabel.text = @"launcher.status.not-verified".loc;
-			[self.launchButton setTitle:@"launcher.verify-gd".loc forState:UIControlStateNormal];
-			[self.launchButton setImage:[[UIImage systemImageNamed:@"checkmark.circle"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] forState:UIControlStateNormal];
-			[self.launchButton addTarget:self action:@selector(verifyGame) forControlEvents:UIControlEventTouchUpInside];
-		} else if (![VerifyInstall verifyGDInstalled] || ![VerifyInstall verifyGeodeInstalled]) {
+		if (![VerifyInstall verifyGDInstalled] || ![VerifyInstall verifyGeodeInstalled]) {
 			self.launchButton.frame = CGRectMake(self.launchButton.frame.origin.x, CGRectGetMaxY(self.optionalTextLabel.frame) + 10, 140, 45);
 			self.settingsButton.frame = CGRectMake(self.settingsButton.frame.origin.x, CGRectGetMaxY(self.optionalTextLabel.frame) + 10, 45, 45);
 			self.optionalTextLabel.text = @"launcher.status.not-installed".loc;
@@ -516,17 +509,12 @@ extern NSString* g_commitHash;
 		}
 		return;
 	}
-	if (![VerifyInstall verifyGDAuthenticity]) {
-		[Utils showError:self title:@"launcher.status.not-verified".loc error:nil];
-		return;
-	}
+	// NOTE: GD authenticity verify step removed — go straight to installation.
 	[self.launchButton setEnabled:NO];
 	[UIApplication sharedApplication].idleTimerDisabled = YES;
 	if ([VerifyInstall verifyGDInstalled] && ![VerifyInstall verifyGeodeInstalled]) {
 		[[[GeodeInstaller alloc] init] startInstall:self ignoreRoot:NO];
 	} else {
-		if (![VerifyInstall verifyGDAuthenticity])
-			return AppLog(@"GD not verified! Not installing!");
 		if (LOCAL_BUILD == 1) {
 			AppLog(@"Downloading locally");
 			NSURLSession* session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration] delegate:self delegateQueue:nil];
