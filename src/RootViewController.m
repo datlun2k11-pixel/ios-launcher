@@ -534,6 +534,45 @@ extern NSString* g_commitHash;
 			[downloadTask resume];
 			return;
 		}
+		// Let user choose between automatic download and importing an IPA from outside (Files app, etc.)
+		UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Install GD" message:@"Download automatically or import your own GD IPA to install."
+																preferredStyle:UIAlertControllerStyleAlert];
+		[alert addAction:[UIAlertAction actionWithTitle:@"Download Automatically" style:UIAlertActionStyleDefault handler:^(UIAlertAction* _Nonnull action) {
+				   [self downloadGameAutomatically];
+			   }]];
+		[alert addAction:[UIAlertAction actionWithTitle:@"Import IPA" style:UIAlertActionStyleDefault handler:^(UIAlertAction* _Nonnull action) {
+				   [self importGameIPA];
+			   }]];
+		[alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction* _Nonnull action) {
+				   [self.launchButton setEnabled:YES];
+				   [UIApplication sharedApplication].idleTimerDisabled = NO;
+				   [self updateState];
+			   }]];
+		[self presentViewController:alert animated:YES completion:nil];
+	}
+}
+
+- (void)importGameIPA {
+	// Ported from custom build: import a GD .ipa from outside (Files app, Share Sheet, etc.)
+	UTType* type = [UTType typeWithIdentifier:@"com.apple.itunes.ipa"];
+	if (!type) {
+		type = [UTType typeWithFilenameExtension:@"ipa"];
+	}
+	if (!type) {
+		type = [UTType typeWithIdentifier:@"public.data"];
+	}
+	if (!type) {
+		AppLog(@"Couldn't find any valid UTType. Not opening picker to prevent crashing.");
+		[Utils showError:self title:@"Couldn't open document picker" error:nil];
+		return;
+	}
+	UIDocumentPickerViewController* picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[ type ] asCopy:YES];
+	picker.delegate = self;
+	picker.allowsMultipleSelection = NO;
+	[self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)downloadGameAutomatically {
 		// this is all so unnecessary, just use import IPA if you're that desperate
 		NSData* b64Data = [[NSData alloc] initWithBase64EncodedString:@"__KEY_PART2__" options:0];
 		if (!b64Data) {
@@ -585,7 +624,6 @@ extern NSString* g_commitHash;
 			}
 		}];
 		[dataTask resume];
-	}
 }
 
 - (void)signAppWithSafeMode:(void (^)(BOOL success, NSString* error))completionHandler {
@@ -1320,6 +1358,20 @@ extern NSString* g_commitHash;
 }
 
 - (void)documentPicker:(UIDocumentPickerViewController*)controller didPickDocumentsAtURLs:(nonnull NSArray<NSURL*>*)urls {
+	NSURL* url = urls.firstObject;
+	// Imported IPA from outside (Files app, etc.) — ported from custom build
+	if ([url.pathExtension.lowercaseString isEqualToString:@"ipa"]) {
+		dispatch_async(dispatch_get_main_queue(), ^{
+			AppLog(@"start installing imported ipa!");
+			self.optionalTextLabel.text = @"launcher.status.extracting".loc;
+			[self.progressBar setProgressText:@"launcher.progress.extract.text".loc];
+			[self.progressBar setHidden:NO];
+			[self.progressBar setCancelHidden:YES];
+		});
+		[VerifyInstall startGDInstall:self url:url];
+		return;
+	}
+
 	NSURL* folderURL = urls.firstObject;
 	// mini "hack" to get around this
 	if ([folderURL startAccessingSecurityScopedResource]) {

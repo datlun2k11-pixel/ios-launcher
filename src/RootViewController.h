@@ -32,4 +32,6 @@
 - (void)launchHelper:(BOOL)safeMode;
 - (void)updatePatchStatus;
 - (void)updateLogoImage:(NSInteger)index;
+- (void)downloadGameAutomatically;
+- (void)importGameIPA;
 @end
